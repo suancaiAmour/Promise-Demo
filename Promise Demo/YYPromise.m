@@ -249,17 +249,16 @@ typedef NS_ENUM(NSUInteger, PromiseState) {
 - (resolveBlock)resolve {
     if (_resolve == nil) {
         _resolve = ^id(id data) {
-            [data isKindOfClass:[YYPromise class]] ? ({
-                // promise 为外部 Promise
-                YYPromise *promise = (YYPromise *)data;
-                // data 为 Promise 表示 object resolve 需要等待到 data Promise PromiseStateFulfilled 才能执行
-                // 这个 data Promise 也就是外部 Promise
-                // 下一次执行 object.resolve 的时候 接收的数据是 promise resolve 出来的数据 从而改变 self then/catchError 的指向(原来 self then/catchError 是接收自己数据的 现在接收 promise 的数据)
+            [data conformsToProtocol:@protocol(dataStreamProtocol)] ? ({
+                // Promise 遵守 dataStreamProtocol 协议
+                // data 遵守  dataStreamProtocol 表示 self resolve 需要等待到 data Promise PromiseStateFulfilled 才能执行
+                // 这个 data 也就是外部 Promise
+                // 下一次执行 self.resolve 的时候 接收的数据是 data promise resolve 出来的数据 从而改变 self then/catchError 的指向(原来 self then/catchError 是接收自己数据的 现在接收 data promise 的数据)
                 // 所以下面做法实现了两个作用：
-                // 1. 延迟执行 self.resolve 到 promise resolve 时
+                // 1. 延迟执行 self.resolve 到 data promise resolve 时
                 // 2. 重新决定 self.resolve 接收的数据链
-                [promise then:self.resolve];
-                [promise catchError:self.reject];
+                [data then:self.resolve];
+                [data catchError:self.reject];
             }) : ({
                 self.state = PromiseStateFulfilled;
                 self.data = data;
@@ -301,7 +300,6 @@ typedef NS_ENUM(NSUInteger, PromiseState) {
 #pragma clang diagnostic pop
 
 #pragma mark - getter
-
 - (NSMutableArray *)deferreds {
     if (_deferreds == nil) {
         _deferreds = [NSMutableArray array];
@@ -310,4 +308,3 @@ typedef NS_ENUM(NSUInteger, PromiseState) {
 }
 
 @end
-

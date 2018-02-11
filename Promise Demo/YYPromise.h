@@ -8,12 +8,17 @@
 
 #import <Foundation/Foundation.h>
 
-
-@class YYPromise;
 typedef id (^resolveBlock)(id data);
 typedef void (^rejectBlock)(NSError *error);
 
-@interface YYPromise : NSObject
+// 数据流协议
+@protocol dataStreamProtocol
+@required
+- (instancetype)then:(resolveBlock)onFulfilled;
+- (instancetype)catchError:(rejectBlock)onRejected;
+@end
+
+@interface YYPromise : NSObject <dataStreamProtocol>
 
 // 具体用法可以参考 ES6 中的解释(不完全相同)
 + (instancetype)createPromise:(void(^)(resolveBlock resolve, rejectBlock reject))subscribe;
