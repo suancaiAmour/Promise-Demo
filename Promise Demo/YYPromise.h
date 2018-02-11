@@ -1,6 +1,6 @@
 //
 //  YYPromise.h
-//  yyoutdoorslive
+//  Promise Demo
 //
 //  Created by zhanghong on 2018/2/9.
 //  Copyright © 2018年 YY. All rights reserved.
@@ -15,6 +15,7 @@ typedef void (^rejectBlock)(NSError *error);
 
 @interface YYPromise : NSObject
 
+// 具体用法可以参考 ES6 中的解释(不完全相同)
 + (instancetype)createPromise:(void(^)(resolveBlock resolve, rejectBlock reject))subscribe;
 + (instancetype)resolve:(id)data;
 + (instancetype)reject:(NSError *)error;

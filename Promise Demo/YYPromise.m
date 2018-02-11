@@ -1,6 +1,6 @@
 //
 //  YYPromise.m
-//  yyoutdoorslive
+//  Promise Demo
 //
 //  Created by zhanghong on 2018/2/9.
 //  Copyright © 2018年 YY. All rights reserved.
@@ -10,9 +10,9 @@
 
 // Promise 的状态
 typedef NS_ENUM(NSUInteger, PromiseState) {
-    PromiseStatePending = 0,
-    PromiseStateFulfilled,
-    PromiseStateRejected,
+    PromiseStatePending = 0, // 进行中
+    PromiseStateFulfilled, // 已成功
+    PromiseStateRejected, // 已失败
 };
 
 #pragma mark - HandleObject
@@ -38,6 +38,7 @@ typedef NS_ENUM(NSUInteger, PromiseState) {
 
 // promise resolve 接收到数据
 @property (nonatomic, strong) id data;
+
 @property (nonatomic, strong) NSMutableArray<__kindof HandleObject *> *deferreds;
 
 // 用于调试
@@ -119,7 +120,7 @@ typedef NS_ENUM(NSUInteger, PromiseState) {
             __weak typeof(reject) weakReject = reject;
             [obj catchError:^(NSError *error) {
                 __strong typeof(weakReject) reject = weakReject;
-                // 这里不事先判断 reject 是否还存在 是因为上面的 resolve 触发后就可能再触发这个 reject
+                // 这里不事先判断 reject 是否还存在 是因为上面的 resolve 触发后就不可能再触发这个 reject
                 reject(error);
                 releaseAllPromise(promiseArray);
             }];
@@ -214,15 +215,7 @@ typedef NS_ENUM(NSUInteger, PromiseState) {
             // onFulfilled 为空的原因是 Promise 的 then 链中间有 catchError
             // 处理方案是通过 catchError 中的 Promise resolve 将数据传递到(后面岔开分支中)下一个 then 的 Promise 中
             id ret = (object.onFulfilled ? object.onFulfilled(self.data) : self.data);
-            [ret isKindOfClass:[YYPromise class]] ? ({
-                // promise 为外部 Promise
-                YYPromise *promise = (YYPromise *)ret;
-                // ret 为 Promise 表示 object resolve 需要等待到 ret Promise PromiseStateFulfilled 才能执行
-                // 这个 ret Promise 也就是外部 Promise
-                // 下一次执行 object.resolve 的时候 接收的数据是 promise resolve 出来的数据
-                [promise then:object.resolve];
-                [promise catchError:object.reject];
-            }) : object.resolve(ret);
+            object.resolve(ret);
             break;
         }
         
@@ -249,7 +242,6 @@ typedef NS_ENUM(NSUInteger, PromiseState) {
     NSLog(@"%@  :  %@", self, [NSString stringWithFormat:@"promise release %ld", num]);
 }
 
-
 #pragma mark - getter
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Warc-retain-cycles"
@@ -257,9 +249,22 @@ typedef NS_ENUM(NSUInteger, PromiseState) {
 - (resolveBlock)resolve {
     if (_resolve == nil) {
         _resolve = ^id(id data) {
-            self.state = PromiseStateFulfilled;
-            self.data = data;
-            [self runDeferreds];
+            [data isKindOfClass:[YYPromise class]] ? ({
+                // promise 为外部 Promise
+                YYPromise *promise = (YYPromise *)data;
+                // data 为 Promise 表示 object resolve 需要等待到 data Promise PromiseStateFulfilled 才能执行
+                // 这个 data Promise 也就是外部 Promise
+                // 下一次执行 object.resolve 的时候 接收的数据是 promise resolve 出来的数据 从而改变 self then/catchError 的指向(原来 self then/catchError 是接收自己数据的 现在接收 promise 的数据)
+                // 所以下面做法实现了两个作用：
+                // 1. 延迟执行 self.resolve 到 promise resolve 时
+                // 2. 重新决定 self.resolve 接收的数据链
+                [promise then:self.resolve];
+                [promise catchError:self.reject];
+            }) : ({
+                self.state = PromiseStateFulfilled;
+                self.data = data;
+                [self runDeferreds];
+            });
             return @"接收到本字符串说明 Promise 相关代码有问题，请提出 issue";
         };
     }
@@ -278,6 +283,12 @@ typedef NS_ENUM(NSUInteger, PromiseState) {
 }
 
 - (void)runDeferreds {
+    // 这里面没有实现将 runDeferreds 在下一次事件循环才执行的功能
+    // 因为 iOS 异步线程默认是没有 RunLoop 的 即使在这里面强行起一个 RunLoop  也没用
+    // 因为外部 block 也会等 RunLoop 被销毁了才会执行
+    // 顺便一提 我在尝试实现中 发觉到 Cocoa Touch 的 RunLoop 是有内存泄露的 在 Core Function 的 RunLoop 才没有内存泄露
+    // 主要是停止 Cocoa Touch RunLoop 比较难
+    // https://www.jianshu.com/p/0fb198ff0912  https://bestswifter.com/runloop-and-thread/ 可以看看这两篇文章
     [self.deferreds enumerateObjectsUsingBlock:^(HandleObject  *_Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
         [self handle:obj];
     }];
@@ -289,6 +300,8 @@ typedef NS_ENUM(NSUInteger, PromiseState) {
 }
 #pragma clang diagnostic pop
 
+#pragma mark - getter
+
 - (NSMutableArray *)deferreds {
     if (_deferreds == nil) {
         _deferreds = [NSMutableArray array];
@@ -297,3 +310,4 @@ typedef NS_ENUM(NSUInteger, PromiseState) {
 }
 
 @end
+
