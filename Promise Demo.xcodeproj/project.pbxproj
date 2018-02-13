@@ -16,6 +16,8 @@
 		FC1EAA54202FEFCC00BD9629 /* Promise_DemoTests.m in Sources */ = {isa = PBXBuildFile; fileRef = FC1EAA53202FEFCC00BD9629 /* Promise_DemoTests.m */; };
 		FC1EAA5F202FEFCC00BD9629 /* Promise_DemoUITests.m in Sources */ = {isa = PBXBuildFile; fileRef = FC1EAA5E202FEFCC00BD9629 /* Promise_DemoUITests.m */; };
 		FC1EAA6E202FF07C00BD9629 /* YYPromise.m in Sources */ = {isa = PBXBuildFile; fileRef = FC1EAA6C202FF07C00BD9629 /* YYPromise.m */; };
+		FC27C1EF20327B1600604210 /* YYGenerator.m in Sources */ = {isa = PBXBuildFile; fileRef = FC27C1EE20327B1600604210 /* YYGenerator.m */; };
+		FC27C1F120327F4B00604210 /* YYCoroutine.s in Sources */ = {isa = PBXBuildFile; fileRef = FC27C1F020327F4B00604210 /* YYCoroutine.s */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -54,6 +56,9 @@
 		FC1EAA60202FEFCC00BD9629 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		FC1EAA6C202FF07C00BD9629 /* YYPromise.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = YYPromise.m; sourceTree = "<group>"; };
 		FC1EAA6D202FF07C00BD9629 /* YYPromise.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = YYPromise.h; sourceTree = "<group>"; };
+		FC27C1ED20327B1600604210 /* YYGenerator.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = YYGenerator.h; sourceTree = "<group>"; };
+		FC27C1EE20327B1600604210 /* YYGenerator.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = YYGenerator.m; sourceTree = "<group>"; };
+		FC27C1F020327F4B00604210 /* YYCoroutine.s */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.asm; path = YYCoroutine.s; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -106,6 +111,9 @@
 			children = (
 				FC1EAA6D202FF07C00BD9629 /* YYPromise.h */,
 				FC1EAA6C202FF07C00BD9629 /* YYPromise.m */,
+				FC27C1ED20327B1600604210 /* YYGenerator.h */,
+				FC27C1EE20327B1600604210 /* YYGenerator.m */,
+				FC27C1F020327F4B00604210 /* YYCoroutine.s */,
 				FC1EAA3A202FEFCC00BD9629 /* AppDelegate.h */,
 				FC1EAA3B202FEFCC00BD9629 /* AppDelegate.m */,
 				FC1EAA3D202FEFCC00BD9629 /* ViewController.h */,
@@ -272,7 +280,9 @@
 			files = (
 				FC1EAA3F202FEFCC00BD9629 /* ViewController.m in Sources */,
 				FC1EAA4A202FEFCC00BD9629 /* main.m in Sources */,
+				FC27C1EF20327B1600604210 /* YYGenerator.m in Sources */,
 				FC1EAA3C202FEFCC00BD9629 /* AppDelegate.m in Sources */,
+				FC27C1F120327F4B00604210 /* YYCoroutine.s in Sources */,
 				FC1EAA6E202FF07C00BD9629 /* YYPromise.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -439,6 +449,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = GQSG2AGKX3;
 				INFOPLIST_FILE = "Promise Demo/Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 8.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = "sdadsada.Promise-Demo";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -453,6 +464,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = GQSG2AGKX3;
 				INFOPLIST_FILE = "Promise Demo/Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 8.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = "sdadsada.Promise-Demo";
 				PRODUCT_NAME = "$(TARGET_NAME)";
