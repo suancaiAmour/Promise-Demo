@@ -13,7 +13,7 @@
 // 协程结构体 内部包含了协程所需要的栈等数据
 typedef struct CoroutineUnit
 {
-    int *regEnv; // 存储寄存器内容的缓冲区 大小为 52*sizeof(int)byte (int在32位还是64位CPU都是4个字节)
+    int *regEnv; // 存储寄存器内容的缓冲区 大小为 48*sizeof(int)byte (int在32位还是64位CPU都是4个字节)
     void *stack; // 栈
     long stackSize; // 栈的大小
     int isSwitch:1; // 切换位标志
@@ -30,64 +30,62 @@ extern void *getFP(void);
 @interface YYGenerator () {
     // 需要释放
     pthread_key_t _coroutineKey;
- 
+    void *_fp;
+    void *_sp;
+    id _data;
 }
 
-@property (nonatomic, copy) void(^genratorBlock)(YYGenerator *genrator);
+@property (nonatomic, copy) id(^genratorBlock)(id data);
 @property (nonatomic, assign) pthread_t currentPthread;
-
 // yield 所处的协程
 @property (nonatomic, assign) pCoroutineUnit yieldCoroutineUnit;
 // next 所处的协程
 @property (nonatomic, assign) pCoroutineUnit nextCoroutineUnit;
 
-@property (nonatomic, assign) void *fp;
-@property (nonatomic, assign) void *sp;
-
-
-
-
 @end
 
 @implementation YYGenerator
 
-static YYGenerator *__genrator;;
-pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+static YYGenerator *__genrator;
+pthread_mutex_t genratorMutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t stackMutex = PTHREAD_MUTEX_INITIALIZER;
 
 #pragma mark - init
-+ (instancetype)createGenrator:(void(^)(YYGenerator *genrator))genratorBlock {
++ (instancetype)createGenrator:(id(^)(id data))genratorBlock {
     
     YYGenerator *genrator = [[YYGenerator alloc] init];
-   
-    
-//    genrator.fp = getFP();
-//    genrator.fp = getSP();
-
+    genrator->_fp = getFP();
+    genrator->_sp = getSP();
+    genrator.genratorBlock = genratorBlock;
     pCoroutineUnit yieldCoroutineUnit = (pCoroutineUnit)calloc(1, sizeof(coroutineUnit));
     // 初始化任务的 CPU 寄存器
-    (*yieldCoroutineUnit).regEnv = (int *)calloc(52, sizeof(int));
-//    (*yieldCoroutineUnit).regEnv[24] = (int)(long)genrator.fp;
-//    (*yieldCoroutineUnit).regEnv[25] = (int)(long)((long)genrator.fp >> 32);
-//    (*yieldCoroutineUnit).regEnv[22] = (int)(long)yield;
-//    (*yieldCoroutineUnit).regEnv[23] = (int)(long)((long)yield >> 32);
-//    (*yieldCoroutineUnit).regEnv[26] = (int)(long)genrator.sp;
-//    (*yieldCoroutineUnit).regEnv[27] = (int)(long)((long)genrator.sp >> 32);
+    (*yieldCoroutineUnit).regEnv = (int *)calloc(48, sizeof(int));
+    (*yieldCoroutineUnit).regEnv[24] = (int)(long)genrator->_fp;
+    (*yieldCoroutineUnit).regEnv[25] = (int)(long)((long)genrator->_fp >> 32);
+    (*yieldCoroutineUnit).regEnv[22] = (int)(long)startCoroutine;
+    (*yieldCoroutineUnit).regEnv[23] = (int)(long)((long)startCoroutine >> 32);
+    (*yieldCoroutineUnit).regEnv[26] = (int)(long)genrator->_sp;
+    (*yieldCoroutineUnit).regEnv[27] = (int)(long)((long)genrator->_sp >> 32);
     genrator.yieldCoroutineUnit = yieldCoroutineUnit;
     
     pCoroutineUnit nextCoroutineUnit = (pCoroutineUnit)calloc(1, sizeof(coroutineUnit));
-    // 初始化任务的 CPU 寄存器
-    (*nextCoroutineUnit).regEnv = (int *)calloc(52, sizeof(int));
-//    (*nextCoroutineUnit).regEnv[24] = (int)(long)genrator.fp;
-//    (*nextCoroutineUnit).regEnv[25] = (int)(long)((long)genrator.fp >> 32);
-//    (*nextCoroutineUnit).regEnv[22] = (int)(long)yield;
-//    (*nextCoroutineUnit).regEnv[23] = (int)(long)((long)yield >> 32);
-//    (*nextCoroutineUnit).regEnv[26] = (int)(long)genrator.sp;
-//    (*nextCoroutineUnit).regEnv[27] = (int)(long)((long)genrator.sp >> 32);
+    (*nextCoroutineUnit).regEnv = (int *)calloc(48, sizeof(int));
+    (*nextCoroutineUnit).regEnv[24] = (int)(long)genrator->_fp;
+    (*nextCoroutineUnit).regEnv[25] = (int)(long)((long)genrator->_fp >> 32);
+    (*nextCoroutineUnit).regEnv[26] = (int)(long)genrator->_sp;
+    (*nextCoroutineUnit).regEnv[27] = (int)(long)((long)genrator->_sp >> 32);
     genrator.nextCoroutineUnit = nextCoroutineUnit;
     
     // 双向链表 让他们可以循环切换
     genrator.nextCoroutineUnit->next = genrator.yieldCoroutineUnit;
     genrator.yieldCoroutineUnit->next = genrator.nextCoroutineUnit;
+    
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        // 互斥锁
+        pthread_mutex_init(&genratorMutex, NULL);
+        pthread_mutex_init(&stackMutex, NULL);
+    });
     
     return genrator;
 }
@@ -101,14 +99,14 @@ pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 }
 
 #pragma mark - public method
-id yield(void(^yieldBlock)(void))
+id yield(id data)
 {
     // __genrator 必须有数据才能运行
     assert(__genrator);
     YYGenerator *self = __genrator;
-    pthread_mutex_unlock(&mutex);
-    
-    return NULL;
+    self->_data = data;
+    [self swtichCoroutine];
+    return self->_data;
 }
 
 - (id)next:(id)data {
@@ -117,24 +115,80 @@ id yield(void(^yieldBlock)(void))
         // TODO: 后期可以尝试实现这一功能
         return [NSError errorWithDomain:@"YYGenerator" code:0 userInfo:@{NSLocalizedDescriptionKey:@"不在同一线程切换协程"}];
     }
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        // 互斥锁
-        pthread_mutex_init(&mutex,NULL);
-    });
-    pthread_mutex_lock(&mutex);
+    pthread_mutex_lock(&genratorMutex);
     __genrator = self;
-    // 赋值到 X0 寄存器上
-    self.yieldCoroutineUnit->regEnv[44] = (int)(long)(data);
-    self.yieldCoroutineUnit->regEnv[45] = (int)(long)((long)data >> 32);
-    
-   
-    
-    return NULL;
+    self->_data = data;
+    pthread_setspecific(self->_coroutineKey, self.nextCoroutineUnit);
+    [self swtichCoroutine];
+    pthread_mutex_unlock(&genratorMutex);
+    return self->_data;
 }
 
 #pragma mark - private method
+- (void)swtichCoroutine {
+    void *__sp = self->_sp;
+    long stackSize = (long)__sp - (long)getSP();
+    
+    pCoroutineUnit pTaskUnit = (pCoroutineUnit)pthread_getspecific(self->_coroutineKey);
+    (*pTaskUnit).stackSize = stackSize;
+    if (pTaskUnit->stack) {
+        free(pTaskUnit->stack);
+        pTaskUnit->stack = NULL;
+    }
+    (*pTaskUnit).stack = calloc(1, stackSize);
+    memcpy((*pTaskUnit).stack, getSP(), (*pTaskUnit).stackSize);
+    pushCoroutineEnv((*pTaskUnit).regEnv);
+    
+    pTaskUnit = (pCoroutineUnit)pthread_getspecific(self->_coroutineKey);
+    if ((*pTaskUnit).isSwitch) {
+        (*pTaskUnit).isSwitch = 0; // 取消任务的切换状态
+        return;
+    }
+    
+    pCoroutineUnit pNextTaskUnit = (*pTaskUnit).next;
+    pthread_setspecific(self->_coroutineKey, pNextTaskUnit);
+    if ((*pNextTaskUnit).stack) {
+        (*pNextTaskUnit).isSwitch = 1; //下一个是切换过来
+        pthread_mutex_lock(&stackMutex);
+        memcpy2stack((void *)((long)__sp - (*pNextTaskUnit).stackSize),(*pNextTaskUnit).stack, (*pNextTaskUnit).stackSize);
+        pthread_mutex_unlock(&stackMutex);
+        // __genrator 必须有数据才能运行
+        assert(__genrator);
+        pNextTaskUnit = (pCoroutineUnit)pthread_getspecific(__genrator->_coroutineKey);
+    }
+    popCoroutineEnv((*pNextTaskUnit).regEnv);
+    NSAssert(1, @"跑到这里，说明代码出现问题了");
+}
 
+static inline void memcpy2stack(void *dest, void *src, long count)
+{
+    static char *tmp = NULL;
+    static char *s = NULL;
+    static long repeatCount = 0;
+    tmp = dest;
+    s   = src;
+    repeatCount = count;
+    
+    while (repeatCount--) {
+        *tmp++ = *s++;
+    }
+}
+
+void startCoroutine(void)
+{
+    // __genrator 必须有数据才能运行
+    assert(__genrator);
+    YYGenerator *self = __genrator;
+    id data = self.genratorBlock(self->_data);
+    self->_data = data;
+    [self swtichCoroutine];
+}
+
+#pragma mark - dealloc
+- (void)dealloc {
+    NSLog(@"哈哈哈");
+    // TODO: 释放资源
+}
 
 @end
 

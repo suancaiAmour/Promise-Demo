@@ -55,9 +55,6 @@ _popCoroutineEnv:
     ldp    d10, d11, [x0, #0x80] // 32, 33, 34, 35
     ldp    d12, d13, [x0, #0x90] // 36, 37, 38, 39
     ldp    d14, d15, [x0, #0xa0] // 40, 41, 42, 43
-    ldp    x3,  x4,  [x0, #0xb0] // 44, 45, 46, 47
-    mov    x0,  x3
-    mov    x1,  x4
     mov    sp, x2
     ret
 

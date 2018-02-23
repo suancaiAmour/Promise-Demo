@@ -8,6 +8,7 @@
 
 #import "ViewController.h"
 #import "YYPromise.h"
+#import "YYGenerator.h"
 
 @interface ViewController ()
 
@@ -17,7 +18,7 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    [self test3];
+    [self test4];
 }
 
 - (void)test0 {
@@ -113,14 +114,14 @@
     YYPromise *promise1 = [YYPromise createPromise:^(resolveBlock resolve, rejectBlock reject) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             // 这种做法 会改变 promise1 的 then/catchError 链的数据链 现在变成了 promise0 的数据链
-//            resolve(promise0);
+            resolve(promise0);
            
-            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-                // 这里面没有实现 先执行 哈哈哈 再执行 resolve 的功能
-                // 具体原因可以查看 YYPromise 中的解释
-                resolve(@1);
-                NSLog(@"哈哈哈");
-            });
+//            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+//                // 这里面没有实现 先执行 哈哈哈 再执行 resolve 的功能
+//                // 具体原因可以查看 YYPromise 中的解释
+//                resolve(@1);
+//                NSLog(@"哈哈哈");
+//            });
         });
     }];
     
@@ -130,7 +131,24 @@
     }] catchError:^(NSError *error) {
         NSLog(@"%@", error);
     }];
+}
+
+- (void)test4 {
+    YYGenerator *gener0 = [YYGenerator createGenrator:^id(id data) {
+        NSLog(@"data %@", data);
+        id data1 = yield(@1);
+        NSLog(@"data %@", data1);
+        id data2 = yield(@2);
+        NSLog(@"data %@", data2);
+        return @3;
+    }];
     
+    id data1 = [gener0 next:@4];
+    NSLog(@"data %@", data1);
+    id data2 = [gener0 next:@5];
+    NSLog(@"data %@", data2);
+    id data3 = [gener0 next:@6];
+    NSLog(@"data %@", data3);
 }
 
 @end
