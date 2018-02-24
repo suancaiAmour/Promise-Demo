@@ -7,8 +7,10 @@
 //
 
 #import "YYGenerator.h"
-#import <pthread.h>
-#import <setjmp.h>
+#include <stdlib.h>
+#include <pthread.h>
+#include <memory.h>
+#include <setjmp.h>
 
 // 协程结构体 内部包含了协程所需要的栈等数据
 typedef struct CoroutineUnit
@@ -20,12 +22,8 @@ typedef struct CoroutineUnit
     struct CoroutineUnit *next;
 }*pCoroutineUnit, coroutineUnit;
 
-extern void pushCoroutineEnv(int *regEnv);
-extern void popCoroutineEnv(int *regEnv);
 extern void *getSP(void);
 extern void *getFP(void);
-
-#define JMPFLAG 2
 
 @interface YYGenerator () {
     // 需要释放
@@ -54,31 +52,34 @@ pthread_mutex_t stackMutex = PTHREAD_MUTEX_INITIALIZER;
 + (instancetype)createGenrator:(id(^)(id data))genratorBlock {
     
     YYGenerator *genrator = [[YYGenerator alloc] init];
+    genrator.genratorBlock = genratorBlock;
+    
     genrator->_fp = getFP();
     genrator->_sp = getSP();
-    genrator.genratorBlock = genratorBlock;
+    
     pCoroutineUnit yieldCoroutineUnit = (pCoroutineUnit)calloc(1, sizeof(coroutineUnit));
     // 初始化任务的 CPU 寄存器
     (*yieldCoroutineUnit).regEnv = (int *)calloc(48, sizeof(int));
-    (*yieldCoroutineUnit).regEnv[24] = (int)(long)genrator->_fp;
-    (*yieldCoroutineUnit).regEnv[25] = (int)(long)((long)genrator->_fp >> 32);
     (*yieldCoroutineUnit).regEnv[22] = (int)(long)startCoroutine;
     (*yieldCoroutineUnit).regEnv[23] = (int)(long)((long)startCoroutine >> 32);
-    (*yieldCoroutineUnit).regEnv[26] = (int)(long)genrator->_sp;
-    (*yieldCoroutineUnit).regEnv[27] = (int)(long)((long)genrator->_sp >> 32);
     genrator.yieldCoroutineUnit = yieldCoroutineUnit;
     
     pCoroutineUnit nextCoroutineUnit = (pCoroutineUnit)calloc(1, sizeof(coroutineUnit));
     (*nextCoroutineUnit).regEnv = (int *)calloc(48, sizeof(int));
-    (*nextCoroutineUnit).regEnv[24] = (int)(long)genrator->_fp;
-    (*nextCoroutineUnit).regEnv[25] = (int)(long)((long)genrator->_fp >> 32);
-    (*nextCoroutineUnit).regEnv[26] = (int)(long)genrator->_sp;
-    (*nextCoroutineUnit).regEnv[27] = (int)(long)((long)genrator->_sp >> 32);
     genrator.nextCoroutineUnit = nextCoroutineUnit;
-    
     // 双向链表 让他们可以循环切换
     genrator.nextCoroutineUnit->next = genrator.yieldCoroutineUnit;
     genrator.yieldCoroutineUnit->next = genrator.nextCoroutineUnit;
+    
+    
+    genrator.yieldCoroutineUnit->regEnv[24] = (int)(long)genrator->_fp;
+    genrator.yieldCoroutineUnit->regEnv[25] = (int)(long)((long)genrator->_fp >> 32);
+    genrator.yieldCoroutineUnit->regEnv[26] = (int)(long)genrator->_sp;
+    genrator.yieldCoroutineUnit->regEnv[27] = (int)(long)((long)genrator->_sp >> 32);
+    genrator.nextCoroutineUnit->regEnv[24] = (int)(long)genrator->_fp;
+    genrator.nextCoroutineUnit->regEnv[25] = (int)(long)((long)genrator->_fp >> 32);
+    genrator.nextCoroutineUnit->regEnv[26] = (int)(long)genrator->_sp;
+    genrator.nextCoroutineUnit->regEnv[27] = (int)(long)((long)genrator->_sp >> 32);
     
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
@@ -109,12 +110,14 @@ id yield(id data)
     return self->_data;
 }
 
+
 - (id)next:(id)data {
     NSAssert(self.currentPthread == pthread_self(), @"不在同一线程内，暂时无法进行协程切换");
     if (self.currentPthread != pthread_self()) {
         // TODO: 后期可以尝试实现这一功能
         return [NSError errorWithDomain:@"YYGenerator" code:0 userInfo:@{NSLocalizedDescriptionKey:@"不在同一线程切换协程"}];
     }
+    
     pthread_mutex_lock(&genratorMutex);
     __genrator = self;
     self->_data = data;
@@ -137,7 +140,7 @@ id yield(id data)
     }
     (*pTaskUnit).stack = calloc(1, stackSize);
     memcpy((*pTaskUnit).stack, getSP(), (*pTaskUnit).stackSize);
-    pushCoroutineEnv((*pTaskUnit).regEnv);
+    setjmp((*pTaskUnit).regEnv);
     
     pTaskUnit = (pCoroutineUnit)pthread_getspecific(self->_coroutineKey);
     if ((*pTaskUnit).isSwitch) {
@@ -156,8 +159,7 @@ id yield(id data)
         assert(__genrator);
         pNextTaskUnit = (pCoroutineUnit)pthread_getspecific(__genrator->_coroutineKey);
     }
-    popCoroutineEnv((*pNextTaskUnit).regEnv);
-    NSAssert(1, @"跑到这里，说明代码出现问题了");
+    longjmp((*pNextTaskUnit).regEnv, 1);
 }
 
 static inline void memcpy2stack(void *dest, void *src, long count)
@@ -165,8 +167,8 @@ static inline void memcpy2stack(void *dest, void *src, long count)
     static char *tmp = NULL;
     static char *s = NULL;
     static long repeatCount = 0;
-    tmp = dest;
-    s   = src;
+    tmp = (char *)dest;
+    s   = (char *)src;
     repeatCount = count;
     
     while (repeatCount--) {
